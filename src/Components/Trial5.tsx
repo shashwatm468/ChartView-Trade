@@ -42,8 +42,7 @@ export default function Trial({ data }: Props) {
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
-      width: 900,
-      height: 400,
+      autoSize: true,
       timeScale: {
         timeVisible: true,
         secondsVisible: true,
@@ -106,7 +105,7 @@ export default function Trial({ data }: Props) {
       markers.current.push({
         time: t,
         position: isBuy ? "belowBar" : "aboveBar",
-        color: isBuy ? "#26a69a" : "#ef5350",
+        color: isBuy ? "#FFD700" : "#00FFFF",
         shape: isBuy ? "arrowUp" : "arrowDown",
         text: isBuy ? "BUY" : "SELL",
       });

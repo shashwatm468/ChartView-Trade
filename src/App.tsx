@@ -39,7 +39,7 @@ export default function App() {
       time += 60;
 
       setData((p) => [...p, candle]);
-    }, 300);
+    }, 1000);
 
     return () => clearInterval(id);
   }, []);
