@@ -2,9 +2,8 @@ import { useEffect, useRef } from "react";
 import {
   createChart,
   CandlestickSeries,
-  createSeriesMarkers,
   LineSeries,
-  type ISeriesMarkersPluginApi,
+  createSeriesMarkers,
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
@@ -24,20 +23,83 @@ type Props = {
 
 export default function Trial({ data }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // IMPORTANT: use "any" to avoid TS mismatch with lightweight-charts markers API
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+
+  const chartRef = useRef<any>(null);
+
   const candleRef = useRef<any>(null);
-  const markerRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const sma20Ref = useRef<any>(null);
   const sma50Ref = useRef<any>(null);
+  const markerRef = useRef<any>(null);
 
   const sma20 = useRef(new SMA(20));
   const sma50 = useRef(new SMA(50));
 
   const prevState = useRef<"above" | "below" | null>(null);
+
   const markers = useRef<SeriesMarker<Time>[]>([]);
 
-  // CREATE CHART
+  // ---------------- SIGNAL LINES ----------------
+  const signalLines = useRef<
+    {
+      time: Time;
+      color: string;
+    }[]
+  >([]);
+
+  // ---------------- CANVAS SETUP ----------------
+  useEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
+
+    canvas.width = 800;
+    canvas.height = 500;
+
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) return;
+
+    ctxRef.current = ctx;
+  }, []);
+
+  // ---------------- REDRAW LINES ----------------
+  const redrawLines = () => {
+    const ctx = ctxRef.current;
+
+    const canvas = canvasRef.current;
+
+    if (!ctx || !canvas || !chartRef.current) return;
+
+    // clear old drawings
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    signalLines.current.forEach((line) => {
+      const x = chartRef.current
+        .timeScale()
+        .timeToCoordinate(line.time);
+
+      if (x === null || x === undefined) return;
+
+      ctx.beginPath();
+
+      ctx.setLineDash([7, 1]);
+
+      ctx.moveTo(x + 0.5, 0);
+
+      ctx.lineTo(x + 0.5, canvas.height - 28);
+
+      ctx.lineWidth = 1;
+
+      ctx.strokeStyle = line.color;
+
+      ctx.stroke();
+    });
+  };
+
+  // ---------------- CREATE CHART ----------------
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -49,7 +111,12 @@ export default function Trial({ data }: Props) {
       },
     });
 
+    chartRef.current = chart;
+
+    // Candles
     const candle = chart.addSeries(CandlestickSeries);
+
+    // SMAs
     const sma20Series = chart.addSeries(LineSeries, {
       color: "orange",
       lineWidth: 2,
@@ -61,24 +128,24 @@ export default function Trial({ data }: Props) {
     });
 
     candleRef.current = candle;
-    markerRef.current = createSeriesMarkers(candle, []);
     sma20Ref.current = sma20Series;
     sma50Ref.current = sma50Series;
 
-    return () => {
-      markerRef.current = null;
-      chart.remove();
-    };
+    // Marker manager
+    markerRef.current = createSeriesMarkers(candle, []);
+
+    return () => chart.remove();
   }, []);
 
-  // UPDATE LOGIC
+  // ---------------- UPDATE DATA ----------------
   useEffect(() => {
     if (!candleRef.current || data.length === 0) return;
 
     const last = data[data.length - 1];
+
     const t = Math.floor(last.time) as Time;
 
-    // candle update
+    // ---------------- CANDLE UPDATE ----------------
     candleRef.current.update({
       time: t,
       open: last.open,
@@ -87,34 +154,64 @@ export default function Trial({ data }: Props) {
       close: last.close,
     });
 
-    // SMA update
+    // ---------------- SMA UPDATE ----------------
     const v20 = sma20.current.update(last.close);
+
     const v50 = sma50.current.update(last.close);
 
     if (v20 === null || v50 === null) return;
 
-    sma20Ref.current.update({ time: t, value: v20 });
-    sma50Ref.current.update({ time: t, value: v50 });
+    sma20Ref.current.update({
+      time: t,
+      value: v20,
+    });
 
-    // CROSSOVER LOGIC
+    sma50Ref.current.update({
+      time: t,
+      value: v50,
+    });
+
+    // ---------------- CROSSOVER STATE ----------------
     const state = v20 > v50 ? "above" : "below";
 
     if (prevState.current && prevState.current !== state) {
       const isBuy = state === "above";
 
-      markers.current.push({
+      // ---------------- MARKERS ----------------
+      const marker: SeriesMarker<Time> = {
         time: t,
         position: isBuy ? "belowBar" : "aboveBar",
         color: isBuy ? "#FFD700" : "#00FFFF",
         shape: isBuy ? "arrowUp" : "arrowDown",
         text: isBuy ? "BUY" : "SELL",
+      };
+
+      markers.current.push(marker);
+
+      markerRef.current.setMarkers(markers.current);
+
+      // ---------------- SIGNAL LINE STATE ----------------
+      signalLines.current.push({
+        time: t,
+        color: isBuy ? "green" : "red",
       });
 
-      markerRef.current?.setMarkers(markers.current);
+      // ---------------- REDRAW ----------------
+      // redrawLines();
     }
-
+    redrawLines();
     prevState.current = state;
   }, [data]);
 
-  return <div ref={containerRef} className="h-screen w-screen" />;
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-[800px] h-[500px]"
+    >
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 z-50 pointer-events-none w-[800px] h-[500px]"
+      />
+    </div>
+  );
 }
