@@ -68,33 +68,21 @@ export default function Trial({ data }: Props) {
   // ---------------- REDRAW LINES ----------------
   const redrawLines = () => {
     const ctx = ctxRef.current;
-
     const canvas = canvasRef.current;
-
     if (!ctx || !canvas || !chartRef.current) return;
-
-    // clear old drawings
+    // clear old draiwngs
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     signalLines.current.forEach((line) => {
       const x = chartRef.current
         .timeScale()
         .timeToCoordinate(line.time);
-
       if (x === null || x === undefined) return;
-
       ctx.beginPath();
-
       ctx.setLineDash([7, 1]);
-
       ctx.moveTo(x + 0.5, 0);
-
       ctx.lineTo(x + 0.5, canvas.height - 28);
-
       ctx.lineWidth = 1;
-
       ctx.strokeStyle = line.color;
-
       ctx.stroke();
     });
   };
@@ -193,7 +181,7 @@ export default function Trial({ data }: Props) {
       // ---------------- SIGNAL LINE STATE ----------------
       signalLines.current.push({
         time: t,
-        color: isBuy ? "green" : "red",
+        color: isBuy ? "#FFD700" : "#00FFFF",
       });
 
       // ---------------- REDRAW ----------------
