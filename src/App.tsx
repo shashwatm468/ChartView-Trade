@@ -26,5 +26,11 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  return <Trial data={data} />;
+  return (
+  <>
+    <div className="flex items-center justify-center h-screen">
+      <Trial data={data} />
+    </div>
+  </>
+);
 }

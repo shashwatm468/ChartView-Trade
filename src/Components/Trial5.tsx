@@ -3,6 +3,7 @@ import {
   createChart,
   CandlestickSeries,
   LineSeries,
+  HistogramSeries,
   createSeriesMarkers,
   type SeriesMarker,
   type Time,
@@ -10,6 +11,7 @@ import {
 
 import { SMA } from "../Data/smaEngine";
 import { RSI } from "../Data/rsiEngine";
+import { AO } from "../Data/aoEngine";
 
 import type { Candle, Phase } from "../Data/gbmEngine";
 
@@ -24,10 +26,8 @@ type SignalLine = {
 
 type StructureBox = {
   label: Phase;
-
   startTime: Time;
   endTime: Time;
-
   high: number;
   low: number;
 };
@@ -44,25 +44,24 @@ export default function Trial({ data }: Props) {
   const sma20Ref = useRef<any>(null);
   const sma50Ref = useRef<any>(null);
   const rsiRef = useRef<any>(null);
+  const aoRef = useRef<any>(null);
 
   const markerRef = useRef<any>(null);
 
-  // ---------------- ENGINE STATE ----------------
+  // ---------------- ENGINE ----------------
 
   const engineRef = useRef({
     sma20: new SMA(20),
     sma50: new SMA(50),
     rsi: new RSI(14),
-
+    ao: new AO(5, 34),
     prevState: null as "above" | "below" | null,
   });
 
-  // ---------------- SIGNAL STORAGE ----------------
+  // ---------------- OVERLAY STORAGE ----------------
 
   const markers = useRef<SeriesMarker<Time>[]>([]);
   const signalLines = useRef<SignalLine[]>([]);
-
-  // ---------------- STRUCTURE BOX STORAGE ----------------
 
   const activeBoxRef = useRef<StructureBox | null>(null);
   const boxesRef = useRef<StructureBox[]>([]);
@@ -72,10 +71,13 @@ export default function Trial({ data }: Props) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     canvas.width = 800;
     canvas.height = 500;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
     ctxRef.current = ctx;
   }, []);
 
@@ -87,7 +89,7 @@ export default function Trial({ data }: Props) {
     return "#FF0000";
   };
 
-  // ---------------- REDRAW ----------------
+  // ---------------- OVERLAY DRAW ----------------
 
   const redrawOverlay = () => {
     const ctx = ctxRef.current;
@@ -99,30 +101,17 @@ export default function Trial({ data }: Props) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // =====================================================
-    // DRAW STRUCTURE BOXES
-    // =====================================================
-
     const allBoxes = [...boxesRef.current];
+    if (activeBoxRef.current) allBoxes.push(activeBoxRef.current);
 
-    if (activeBoxRef.current) {
-      allBoxes.push(activeBoxRef.current);
-    }
-
+    // BOXES
     allBoxes.forEach((box) => {
       const x1 = chart.timeScale().timeToCoordinate(box.startTime);
       const x2 = chart.timeScale().timeToCoordinate(box.endTime);
       const y1 = candleSeries.priceToCoordinate(box.high);
       const y2 = candleSeries.priceToCoordinate(box.low);
 
-      if (
-        x1 == null ||
-        x2 == null ||
-        y1 == null ||
-        y2 == null
-      ) {
-        return;
-      }
+      if (x1 == null || x2 == null || y1 == null || y2 == null) return;
 
       const left = Math.min(x1, x2);
       const width = Math.abs(x2 - x1);
@@ -130,36 +119,27 @@ export default function Trial({ data }: Props) {
       const height = Math.abs(y2 - y1);
       const color = getBoxColor(box.label);
 
-      // transparent fill
-
       ctx.save();
       ctx.globalAlpha = 0.15;
       ctx.fillStyle = color;
       ctx.fillRect(left, top, width, height);
       ctx.restore();
 
-      // border
-
-      ctx.beginPath();
       ctx.strokeStyle = color;
       ctx.lineWidth = 0.5;
       ctx.strokeRect(left, top, width, height);
     });
 
-    // =====================================================
-    // DRAW SIGNAL LINES
-    // =====================================================
-
+    // SIGNAL LINES
     signalLines.current.forEach((line) => {
       const x = chart.timeScale().timeToCoordinate(line.time);
-
       if (x == null) return;
+
       ctx.beginPath();
       ctx.setLineDash([6, 4]);
       ctx.moveTo(x + 0.5, 0);
       ctx.lineTo(x + 0.5, canvas.height);
       ctx.strokeStyle = line.color;
-      ctx.lineWidth = 1;
       ctx.stroke();
     });
 
@@ -179,62 +159,70 @@ export default function Trial({ data }: Props) {
       },
       layout: {
         panes: {
-      separatorColor: "black",
-      separatorHoverColor: "#FFD700",
-    },
-      }
+          separatorColor: "black",
+          separatorHoverColor: "#FFD700",
+        },
+      },
     });
 
     chartRef.current = chart;
 
+    // ---------------- CANDLES ----------------
+
     const candle = chart.addSeries(CandlestickSeries, {
       upColor: "#26a69a",
       downColor: "#ef5350",
-
       borderVisible: false,
-
       wickUpColor: "#26a69a",
       wickDownColor: "#ef5350",
-
       lastValueVisible: false,
       priceLineVisible: false,
     });
 
-    const sma20Series = chart.addSeries(LineSeries, {
+    // ---------------- SMA ----------------
+
+    const sma20 = chart.addSeries(LineSeries, {
       color: "orange",
       lineWidth: 2,
     });
 
-    const sma50Series = chart.addSeries(LineSeries, {
+    const sma50 = chart.addSeries(LineSeries, {
       color: "blue",
       lineWidth: 2,
     });
 
     // ---------------- RSI PANE ----------------
 
-    const rsiSeries = chart.addSeries(
+    const rsi = chart.addSeries(
       LineSeries,
       {
         color: "#6c4275",
         lineWidth: 1,
         lastValueVisible: false,
         priceLineVisible: false,
-        crosshairMarkerVisible: false,
       },
       1
     );
 
-    rsiSeries.priceScale().applyOptions({
-      visible: true,
-    });
+    // ---------------- AO HISTOGRAM PANE ----------------
+
+    const ao = chart.addSeries(
+      HistogramSeries,
+      {
+        base: 0,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      },
+      2
+    );
 
     candleRef.current = candle;
-    sma20Ref.current = sma20Series;
-    sma50Ref.current = sma50Series;
-    rsiRef.current = rsiSeries;
-    markerRef.current = createSeriesMarkers(candle, []);
+    sma20Ref.current = sma20;
+    sma50Ref.current = sma50;
+    rsiRef.current = rsi;
+    aoRef.current = ao;
 
-    // redraw on pan/zoom
+    markerRef.current = createSeriesMarkers(candle, []);
 
     chart.timeScale().subscribeVisibleTimeRangeChange(() => {
       redrawOverlay();
@@ -251,9 +239,7 @@ export default function Trial({ data }: Props) {
     const last = data[data.length - 1];
     const t = Math.floor(last.time) as Time;
 
-    // =====================================================
-    // CANDLE UPDATE
-    // =====================================================
+    // ---------------- CANDLE ----------------
 
     candleRef.current.update({
       time: t,
@@ -263,44 +249,39 @@ export default function Trial({ data }: Props) {
       close: last.close,
     });
 
-    // =====================================================
-    // SMA UPDATE
-    // =====================================================
+    // ---------------- SMA ----------------
 
     const engine = engineRef.current;
+
     const v20 = engine.sma20.update(last.close);
     const v50 = engine.sma50.update(last.close);
     if (v20 === null || v50 === null) return;
 
-    sma20Ref.current.update({
-      time: t,
-      value: v20,
-    });
+    sma20Ref.current.update({ time: t, value: v20 });
+    sma50Ref.current.update({ time: t, value: v50 });
 
-    sma50Ref.current.update({
-      time: t,
-      value: v50,
-    });
+    // ---------------- RSI ----------------
 
-    // =====================================================
-    // RSI UPDATE
-    // =====================================================
+    const rsiVal = engine.rsi.update(last.close);
+    if (rsiVal !== null) {
+      rsiRef.current.update({ time: t, value: rsiVal });
+    }
 
-    const rsi = engine.rsi.update(last.close);
+    // ---------------- AO HISTOGRAM ----------------
 
-    if (rsi !== null) {
-      rsiRef.current.update({
+    const aoVal = engine.ao.update(last.high, last.low);
+
+    if (aoVal !== null) {
+      aoRef.current.update({
         time: t,
-        value: rsi,
+        value: aoVal,
+        color: aoVal >= 0 ? "#26a69a" : "#ef5350",
       });
     }
 
-    // =====================================================
-    // CROSSOVER LOGIC
-    // =====================================================
+    // ---------------- CROSSOVER ----------------
 
-    const state: "above" | "below" =
-      v20 > v50 ? "above" : "below";
+    const state: "above" | "below" = v20 > v50 ? "above" : "below";
 
     if (engine.prevState && engine.prevState !== state) {
       const isBuy = state === "above";
@@ -315,6 +296,7 @@ export default function Trial({ data }: Props) {
 
       markers.current.push(marker);
       markerRef.current.setMarkers([...markers.current]);
+
       signalLines.current.push({
         time: t,
         color: isBuy ? "#FFD700" : "#00FFFF",
@@ -323,53 +305,33 @@ export default function Trial({ data }: Props) {
 
     engine.prevState = state;
 
-    // =====================================================
-    // STRUCTURE BOX ENGINE
-    // =====================================================
+    // ---------------- STRUCTURE BOX ----------------
 
     const label = last.label;
-
-    // ---------- RANDOM ----------
 
     if (label === "random") {
       if (activeBoxRef.current) {
         boxesRef.current.push(activeBoxRef.current);
-
         activeBoxRef.current = null;
       }
-    }
-
-    // ---------- STRUCTURED ----------
-
-    else {
+    } else {
       const active = activeBoxRef.current;
-
-      // no active box
 
       if (!active) {
         activeBoxRef.current = {
           label,
-
           startTime: t,
           endTime: t,
-
           high: last.high,
           low: last.low,
         };
-      }
-
-      // same label -> extend box
-
-      else if (active.label === label) {
+      } else if (active.label === label) {
         active.endTime = t;
         active.high = Math.max(active.high, last.high);
         active.low = Math.min(active.low, last.low);
-      }
-
-      // label changed -> finalize old + start new
-
-      else {
+      } else {
         boxesRef.current.push(active);
+
         activeBoxRef.current = {
           label,
           startTime: t,
@@ -379,19 +341,12 @@ export default function Trial({ data }: Props) {
         };
       }
     }
-
-    // =====================================================
-    // REDRAW
-    // =====================================================
 
     redrawOverlay();
   }, [data]);
 
   return (
-    <div
-      ref={containerRef}
-      className="relative w-[800px] h-[500px]"
-    >
+    <div ref={containerRef} className="relative w-[800px] h-[500px]">
       <canvas
         ref={canvasRef}
         className="absolute inset-0 z-50 pointer-events-none"
