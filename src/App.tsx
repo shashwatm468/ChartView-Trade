@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react";
 import Trial from "../src/Components/Trial5";
 import { generateNextCandle } from "./Data/gbmEngine";
-
-type Candle = {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-};
+import type { Candle } from "./Data/gbmEngine";
 
 export default function App() {
   const [data, setData] = useState<Candle[]>([]);
