@@ -9,6 +9,8 @@ import {
 } from "lightweight-charts";
 
 import { SMA } from "../Data/smaEngine";
+import { RSI } from "../Data/rsiEngine";
+
 import type { Candle, Phase } from "../Data/gbmEngine";
 
 type Props = {
@@ -41,58 +43,56 @@ export default function Trial({ data }: Props) {
   const candleRef = useRef<any>(null);
   const sma20Ref = useRef<any>(null);
   const sma50Ref = useRef<any>(null);
+  const rsiRef = useRef<any>(null);
 
   const markerRef = useRef<any>(null);
 
   // ---------------- ENGINE STATE ----------------
+
   const engineRef = useRef({
     sma20: new SMA(20),
     sma50: new SMA(50),
+    rsi: new RSI(14),
+
     prevState: null as "above" | "below" | null,
   });
 
   // ---------------- SIGNAL STORAGE ----------------
-  const markers = useRef<SeriesMarker<Time>[]>([]);
 
+  const markers = useRef<SeriesMarker<Time>[]>([]);
   const signalLines = useRef<SignalLine[]>([]);
 
   // ---------------- STRUCTURE BOX STORAGE ----------------
-  const activeBoxRef = useRef<StructureBox | null>(null);
 
+  const activeBoxRef = useRef<StructureBox | null>(null);
   const boxesRef = useRef<StructureBox[]>([]);
 
   // ---------------- CANVAS INIT ----------------
+
   useEffect(() => {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
-
     canvas.width = 800;
     canvas.height = 500;
-
     const ctx = canvas.getContext("2d");
-
     if (!ctx) return;
-
     ctxRef.current = ctx;
   }, []);
 
   // ---------------- BOX COLOR ----------------
+
   const getBoxColor = (label: Phase) => {
-    // console.log(label);
-  if (label === "R") return "#00FF00"; // green
-  if (label === "B") return "#FFD700"; // yellow
-  return "#FF0000"; // red (D)
-};
+    if (label === "R") return "#00FF00";
+    if (label === "B") return "#FFD700";
+    return "#FF0000";
+  };
 
   // ---------------- REDRAW ----------------
+
   const redrawOverlay = () => {
     const ctx = ctxRef.current;
-
     const canvas = canvasRef.current;
-
     const chart = chartRef.current;
-
     const candleSeries = candleRef.current;
 
     if (!ctx || !canvas || !chart || !candleSeries) return;
@@ -111,11 +111,8 @@ export default function Trial({ data }: Props) {
 
     allBoxes.forEach((box) => {
       const x1 = chart.timeScale().timeToCoordinate(box.startTime);
-
       const x2 = chart.timeScale().timeToCoordinate(box.endTime);
-
       const y1 = candleSeries.priceToCoordinate(box.high);
-
       const y2 = candleSeries.priceToCoordinate(box.low);
 
       if (
@@ -128,33 +125,24 @@ export default function Trial({ data }: Props) {
       }
 
       const left = Math.min(x1, x2);
-
       const width = Math.abs(x2 - x1);
-
       const top = Math.min(y1, y2);
-
       const height = Math.abs(y2 - y1);
-
       const color = getBoxColor(box.label);
 
       // transparent fill
+
       ctx.save();
-
       ctx.globalAlpha = 0.15;
-
       ctx.fillStyle = color;
-
       ctx.fillRect(left, top, width, height);
-
       ctx.restore();
 
       // border
+
       ctx.beginPath();
-
       ctx.strokeStyle = color;
-
       ctx.lineWidth = 0.5;
-
       ctx.strokeRect(left, top, width, height);
     });
 
@@ -166,19 +154,12 @@ export default function Trial({ data }: Props) {
       const x = chart.timeScale().timeToCoordinate(line.time);
 
       if (x == null) return;
-
       ctx.beginPath();
-
       ctx.setLineDash([6, 4]);
-
       ctx.moveTo(x + 0.5, 0);
-
       ctx.lineTo(x + 0.5, canvas.height);
-
       ctx.strokeStyle = line.color;
-
       ctx.lineWidth = 1;
-
       ctx.stroke();
     });
 
@@ -186,21 +167,38 @@ export default function Trial({ data }: Props) {
   };
 
   // ---------------- CHART INIT ----------------
+
   useEffect(() => {
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
       autoSize: true,
-
       timeScale: {
         timeVisible: true,
         secondsVisible: true,
       },
+      layout: {
+        panes: {
+      separatorColor: "black",
+      separatorHoverColor: "#FFD700",
+    },
+      }
     });
 
     chartRef.current = chart;
 
-    const candle = chart.addSeries(CandlestickSeries);
+    const candle = chart.addSeries(CandlestickSeries, {
+      upColor: "#26a69a",
+      downColor: "#ef5350",
+
+      borderVisible: false,
+
+      wickUpColor: "#26a69a",
+      wickDownColor: "#ef5350",
+
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
 
     const sma20Series = chart.addSeries(LineSeries, {
       color: "orange",
@@ -212,14 +210,32 @@ export default function Trial({ data }: Props) {
       lineWidth: 2,
     });
 
-    candleRef.current = candle;
+    // ---------------- RSI PANE ----------------
 
+    const rsiSeries = chart.addSeries(
+      LineSeries,
+      {
+        color: "#6c4275",
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      },
+      1
+    );
+
+    rsiSeries.priceScale().applyOptions({
+      visible: true,
+    });
+
+    candleRef.current = candle;
     sma20Ref.current = sma20Series;
     sma50Ref.current = sma50Series;
-
+    rsiRef.current = rsiSeries;
     markerRef.current = createSeriesMarkers(candle, []);
 
     // redraw on pan/zoom
+
     chart.timeScale().subscribeVisibleTimeRangeChange(() => {
       redrawOverlay();
     });
@@ -228,11 +244,11 @@ export default function Trial({ data }: Props) {
   }, []);
 
   // ---------------- STREAM UPDATE ----------------
+
   useEffect(() => {
     if (!candleRef.current || data.length === 0) return;
 
     const last = data[data.length - 1];
-
     const t = Math.floor(last.time) as Time;
 
     // =====================================================
@@ -252,11 +268,8 @@ export default function Trial({ data }: Props) {
     // =====================================================
 
     const engine = engineRef.current;
-
     const v20 = engine.sma20.update(last.close);
-
     const v50 = engine.sma50.update(last.close);
-
     if (v20 === null || v50 === null) return;
 
     sma20Ref.current.update({
@@ -270,6 +283,19 @@ export default function Trial({ data }: Props) {
     });
 
     // =====================================================
+    // RSI UPDATE
+    // =====================================================
+
+    const rsi = engine.rsi.update(last.close);
+
+    if (rsi !== null) {
+      rsiRef.current.update({
+        time: t,
+        value: rsi,
+      });
+    }
+
+    // =====================================================
     // CROSSOVER LOGIC
     // =====================================================
 
@@ -281,20 +307,14 @@ export default function Trial({ data }: Props) {
 
       const marker: SeriesMarker<Time> = {
         time: t,
-
         position: isBuy ? "belowBar" : "aboveBar",
-
         color: isBuy ? "#FFD700" : "#00FFFF",
-
         shape: isBuy ? "arrowUp" : "arrowDown",
-
         text: isBuy ? "BUY" : "SELL",
       };
 
       markers.current.push(marker);
-
       markerRef.current.setMarkers([...markers.current]);
-
       signalLines.current.push({
         time: t,
         color: isBuy ? "#FFD700" : "#00FFFF",
@@ -310,6 +330,7 @@ export default function Trial({ data }: Props) {
     const label = last.label;
 
     // ---------- RANDOM ----------
+
     if (label === "random") {
       if (activeBoxRef.current) {
         boxesRef.current.push(activeBoxRef.current);
@@ -319,10 +340,12 @@ export default function Trial({ data }: Props) {
     }
 
     // ---------- STRUCTURED ----------
+
     else {
       const active = activeBoxRef.current;
 
       // no active box
+
       if (!active) {
         activeBoxRef.current = {
           label,
@@ -336,24 +359,21 @@ export default function Trial({ data }: Props) {
       }
 
       // same label -> extend box
+
       else if (active.label === label) {
         active.endTime = t;
-
         active.high = Math.max(active.high, last.high);
-
         active.low = Math.min(active.low, last.low);
       }
 
       // label changed -> finalize old + start new
+
       else {
         boxesRef.current.push(active);
-
         activeBoxRef.current = {
           label,
-
           startTime: t,
           endTime: t,
-
           high: last.high,
           low: last.low,
         };
