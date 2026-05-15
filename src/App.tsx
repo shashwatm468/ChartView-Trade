@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import Trial from "../src/Components/Trial5";
+
+import MainPage from "./Components/Pages/MainPage";
+
 import { generateNextCandle } from "./Data/gbmEngine";
 import type { Candle } from "./Data/gbmEngine";
 
@@ -20,17 +22,12 @@ export default function App() {
 
       lastClose = candle.close;
       currentTime = candle.time;
+
       setData((prev) => [...prev, candle]);
     }, 100);
 
     return () => clearInterval(id);
   }, []);
 
-  return (
-  <>
-    <div className="flex items-center justify-center h-screen">
-      <Trial data={data} />
-    </div>
-  </>
-);
+  return <MainPage data={data} />;
 }

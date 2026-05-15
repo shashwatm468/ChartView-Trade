@@ -9,11 +9,11 @@ import {
   type Time,
 } from "lightweight-charts";
 
-import { SMA } from "../Data/smaEngine";
-import { RSI } from "../Data/rsiEngine";
-import { AO } from "../Data/aoEngine";
+import { SMA } from "../../Data/smaEngine";
+import { RSI } from "../../Data/rsiEngine";
+import { AO } from "../../Data/aoEngine";
 
-import type { Candle, Phase } from "../Data/gbmEngine";
+import type { Candle, Phase } from "../../Data/gbmEngine";
 
 type Props = {
   data: Candle[];
