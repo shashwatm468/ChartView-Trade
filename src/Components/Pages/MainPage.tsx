@@ -37,25 +37,34 @@ export default function MainPage({ data }: Props) {
   };
 
   return (
-    <div className="bg-zinc-800 h-screen flex">
-      <LeftSection />
+    <div className="bg-zinc-900 h-screen flex">
+      {/* <LeftSection /> */}
 
       <div className="flex-1">
-        <div className="border-2 border-black flex">
-          {tabNames.map((item) => {
-            return (
-              <TabButtons
-                key={item}
-                ButtonName={item}
-                onClick={() => setTab(item)}
-              />
-            );
-          })}
-        </div>
+
+        {/* <div className="flex pl-1 pr-2 py-1 justify-between items-center">
+          <div className="flex">
+            {tabNames.map((item) => {
+              return (
+                <TabButtons
+                  key={item}
+                  ButtonName={item}
+                  isActive={tab === item}
+                  onClick={() => setTab(item)}
+                />
+              );
+            })}
+          </div>
+          <div className="flex text-white">
+            Profile
+          </div>
+        </div> */}
+
 
         <div>
           {tabContent[tab]}
         </div>
+
       </div>
     </div>
   );

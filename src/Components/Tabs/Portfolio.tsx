@@ -9,11 +9,11 @@ type Props = {
 
 export default function Portfolio({ data }: Props) {
   return (
-    <div className="bg-slate-500 h-screen w-full flex justify-evenly items-center">
+    <div className="bg-zinc-900 h-screen w-full flex justify-evenly items-center">
       <Trial data={data} />
       <div className="flex bg-slate-950 px-3 py-1 rounded-sm gap-2">
-        <WishlistButton/>
-        <WishlistButton/>
+        {/* <WishlistButton/> */}
+        {/* <WishlistButton/> */}
       </div>
     </div>
   );
